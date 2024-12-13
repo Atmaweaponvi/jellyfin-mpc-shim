@@ -259,7 +259,7 @@ public partial class MainForm : Form, IJellyfinMessageHandler
 
     public Task HandleStop()
     {
-        //Shutdown application when Jellfin connection is stopped
+        //Shutdown application when Jellyfin connection is stopped
         _hostlLifetime.StopApplication();
         return Task.CompletedTask;
     }
