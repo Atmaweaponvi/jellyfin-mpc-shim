@@ -19,6 +19,7 @@ if (Settings.Default.UpgradeNeeded)
 {
     Settings.Default.Upgrade();
     Settings.Default.UpgradeNeeded = false;
+    Settings.Default.JellyfinDeviceId = Guid.NewGuid();
     Settings.Default.Save();
     Settings.Default.Reload();
 }
@@ -63,6 +64,6 @@ settings.Initialize(
     "Jellyfin MPC Shim Tray",
     version,
     Environment.MachineName,
-    $"jellfiin-mpc-shim-tray-{version}-71235034-4346-4A5F-9D82-437066B86654");
+    $"jellyfin-mpc-shim-tray-{version}-{Settings.Default.JellyfinDeviceId:N}");
 var eh = host.Services.GetService<ExceptionLogger>();
 await host.RunAsync();

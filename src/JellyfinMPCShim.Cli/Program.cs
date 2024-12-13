@@ -51,6 +51,6 @@ settings.Initialize(
     "Jellyfin MPC Shim cli",
     version,
     Environment.MachineName,
-    $"jellfiin-mpc-shim-cli-{version}-14FB3D88-F151-45FA-A878-5AA6CEF3F9D2");
+    $"jellfiin-mpc-shim-cli-{version}-{Guid.NewGuid():N}");
 
 await host.RunAsync();
