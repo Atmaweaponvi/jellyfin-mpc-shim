@@ -1,0 +1,29 @@
+name: Build JellyfinMPCShim (patched)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master, main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore src/JellyfinMPCShim.Tray/JellyfinMPCShim.Tray.csproj
+
+      - name: Publish
+        run: dotnet publish src/JellyfinMPCShim.Tray/JellyfinMPCShim.Tray.csproj -c Release -o publish_output --self-contained false
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: JellyfinMPCShim-patched
+          path: publish_output
