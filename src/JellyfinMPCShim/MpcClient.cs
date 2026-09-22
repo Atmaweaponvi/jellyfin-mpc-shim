@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Text.Json;
 using Jellyfin.Sdk.Generated.Models;
 using Jellyfin.Sdk.Generated.Sessions.Item.Playing;
@@ -382,25 +382,35 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
 
     private async void MpcObserverOnError(object sender, ExceptionEventArgs e)
     {
-        var media = _media;
-        _media = null;
-        //Communication with MPC failed. Mark playback as stopped
-        if (media != null)
+        // async void: any exception thrown below is unrecoverable and crashes the whole
+        // process. Everything is wrapped so an exception here just gets logged instead.
+        try
         {
-            await _jellyfinClient.ReportPlaybackStopped(new PlaybackStopInfo
+            _logger.LogError(e.Exception, "MPC observer reported an error");
+            var media = _media;
+            _media = null;
+            //Communication with MPC failed. Mark playback as stopped
+            if (media != null)
             {
-                MediaSourceId = media.Video.MediaSource?.Id,
-                PlaySessionId = media.Video.PlaySessionId,
-                ItemId = media.Video.Id,
-                PositionTicks = (_lastState != null)
-                    ? TimeSpan.FromMilliseconds(_lastState.PositionMillisec).Ticks
-                    : null
-            });
-        }
+                await _jellyfinClient.ReportPlaybackStopped(new PlaybackStopInfo
+                {
+                    MediaSourceId = media.Video.MediaSource?.Id,
+                    PlaySessionId = media.Video.PlaySessionId,
+                    ItemId = media.Video.Id,
+                    PositionTicks = (_lastState != null)
+                        ? TimeSpan.FromMilliseconds(_lastState.PositionMillisec).Ticks
+                        : null
+                });
+            }
 
-        if (_syncPlay)
+            if (_syncPlay)
+            {
+                await _jellyfinClient.SyncPlayStop();
+            }
+        }
+        catch (Exception ex)
         {
-            await _jellyfinClient.SyncPlayStop();
+            _logger.LogError(ex, "Error handling MPC observer error event");
         }
     }
 
@@ -424,13 +434,36 @@ internal class MpcClient : IMpcClient, IJellyfinMessageHandler
 
     private async void MpcObserverOnPropertyChanged(object sender, PropertyChangedEventArgs args)
     {
+        // async void: everything below is wrapped in try/catch further down so an
+        // exception here (e.g. a transient failure reporting to Jellyfin) gets logged
+        // instead of crashing the whole process.
+        try
+        {
+            await HandleMpcPropertyChanged(args);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling MPC property changed event {property}", args.Property);
+        }
+    }
+
+    private async Task HandleMpcPropertyChanged(PropertyChangedEventArgs args)
+    {
         if (_media == null)
         {
             return;
         }
 
-        if (await _media.Video.GetPlaybackUrl() != args.NewInfo.FilePath)
+        var expectedUrl = (await _media.Video.GetPlaybackUrl()).ToString();
+        if (!string.Equals(expectedUrl, args.NewInfo.FilePath, StringComparison.OrdinalIgnoreCase))
         {
+            // Previously this comparison failed silently, so any URL/FilePath mismatch
+            // (encoding, casing, trailing slash, etc.) meant playback status was never
+            // reported again for the rest of the session, with no way to tell why.
+            // Logging it here at least makes the mismatch visible instead of invisible.
+            _logger.LogWarning(
+                "MPC reported file path does not match expected playback URL, ignoring update. Expected: {expected}, Actual: {actual}",
+                expectedUrl, args.NewInfo.FilePath);
             return;
         }
 
