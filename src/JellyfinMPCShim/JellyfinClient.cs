@@ -1,4 +1,4 @@
-﻿using System.Net.WebSockets;
+using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading.Channels;
 using Flurl;
@@ -108,10 +108,16 @@ internal class JellyfinClient : IJellyfinClient
         _wsc.DisconnectionHappened.Subscribe(info =>
         {
             _logger.LogWarning("Websocket disconnection happened {type} {exception}", info.Type, info.Exception);
-            if (IsConnected && info.Type != DisconnectionType.Exit)
-            {
-                _ = Stop();
-            }
+            // Websocket.Client has built-in automatic reconnection (enabled by default).
+            // Previously this called Stop(), which disposed _wsc immediately and prevented
+            // that automatic reconnection from ever getting a chance to run - turning every
+            // transient network blip into a full shutdown of the whole application.
+            // We only need to react here if the disconnect was something the library itself
+            // can't recover from on its own.
+        });
+        _wsc.ReconnectionHappened.Subscribe(info =>
+        {
+            _logger.LogInformation("Websocket reconnected {type}", info.Type);
         });
         _ = Task.Run(async () =>
         {
